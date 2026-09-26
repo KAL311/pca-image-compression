@@ -1,0 +1,30 @@
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Quarto
+/.quarto/
+/index_files/
+*_cache/
+# (no wildcard *_files/ here: it would also match docs/index_files/,
+# which holds the CSS GitHub Pages needs)
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# rsconnect deployment records (contain account metadata)
+rsconnect/
+
+# NOTE: data/ and docs/ are intentionally NOT ignored --
+# docs/ is what GitHub Pages serves, and data/ is needed to re-render.
+
+**/*.quarto_ipynb
+
+# tooling artefacts, not part of the project
+.claude-flow/
+.quarto/

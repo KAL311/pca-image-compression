@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Kyle Fraund">
+<meta name="dcterms.date" content="2026-09-25">
+
+<title>Image Compression with Principal Components</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="index_files/libs/clipboard/clipboard.min.js"></script>
+<script src="index_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="index_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="index_files/libs/quarto-html/popper.min.js"></script>
+<script src="index_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="index_files/libs/quarto-html/anchor.min.js"></script>
+<link href="index_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="index_files/libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="index_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="index_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="index_files/libs/bootstrap/bootstrap-67270d1595a62d14f123c043d4fb2f18.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article toc-left">
+<div id="quarto-sidebar-toc-left" class="sidebar toc-left">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#what-this-page-is" id="toc-what-this-page-is" class="nav-link active" data-scroll-target="#what-this-page-is">What this page is</a></li>
+  <li><a href="#part-1-the-compression-function" id="toc-part-1-the-compression-function" class="nav-link" data-scroll-target="#part-1-the-compression-function">Part 1: the compression function</a>
+  <ul class="collapse">
+  <li><a href="#does-it-actually-work" id="toc-does-it-actually-work" class="nav-link" data-scroll-target="#does-it-actually-work">Does it actually work?</a></li>
+  </ul></li>
+  <li><a href="#part-2-the-images" id="toc-part-2-the-images" class="nav-link" data-scroll-target="#part-2-the-images">Part 2: the images</a></li>
+  <li><a href="#image1" id="toc-image1" class="nav-link" data-scroll-target="#image1">image1</a>
+  <ul class="collapse">
+  <li><a href="#the-original-then-k-1-through-10" id="toc-the-original-then-k-1-through-10" class="nav-link" data-scroll-target="#the-original-then-k-1-through-10">The original, then k = 1 through 10</a></li>
+  <li><a href="#going-past-k-10" id="toc-going-past-k-10" class="nav-link" data-scroll-target="#going-past-k-10">Going past k = 10</a></li>
+  <li><a href="#error-at-every-k-from-1-to-100" id="toc-error-at-every-k-from-1-to-100" class="nav-link" data-scroll-target="#error-at-every-k-from-1-to-100">Error at every k from 1 to 100</a></li>
+  <li><a href="#the-first-eigenvector-and-the-first-score-vector" id="toc-the-first-eigenvector-and-the-first-score-vector" class="nav-link" data-scroll-target="#the-first-eigenvector-and-the-first-score-vector">The first eigenvector and the first score vector</a></li>
+  <li><a href="#reading-u1-and-z1" id="toc-reading-u1-and-z1" class="nav-link" data-scroll-target="#reading-u1-and-z1">Reading u1 and z1</a></li>
+  <li><a href="#how-far-would-i-go-with-k" id="toc-how-far-would-i-go-with-k" class="nav-link" data-scroll-target="#how-far-would-i-go-with-k">How far would I go with k?</a></li>
+  </ul></li>
+  <li><a href="#image2" id="toc-image2" class="nav-link" data-scroll-target="#image2">image2</a>
+  <ul class="collapse">
+  <li><a href="#the-original-then-k-1-through-10-1" id="toc-the-original-then-k-1-through-10-1" class="nav-link" data-scroll-target="#the-original-then-k-1-through-10-1">The original, then k = 1 through 10</a></li>
+  <li><a href="#going-past-k-10-1" id="toc-going-past-k-10-1" class="nav-link" data-scroll-target="#going-past-k-10-1">Going past k = 10</a></li>
+  <li><a href="#error-at-every-k-from-1-to-100-1" id="toc-error-at-every-k-from-1-to-100-1" class="nav-link" data-scroll-target="#error-at-every-k-from-1-to-100-1">Error at every k from 1 to 100</a></li>
+  <li><a href="#the-first-eigenvector-and-the-first-score-vector-1" id="toc-the-first-eigenvector-and-the-first-score-vector-1" class="nav-link" data-scroll-target="#the-first-eigenvector-and-the-first-score-vector-1">The first eigenvector and the first score vector</a></li>
+  <li><a href="#reading-u1-and-z1-1" id="toc-reading-u1-and-z1-1" class="nav-link" data-scroll-target="#reading-u1-and-z1-1">Reading u1 and z1</a></li>
+  <li><a href="#how-far-would-i-go-with-k-1" id="toc-how-far-would-i-go-with-k-1" class="nav-link" data-scroll-target="#how-far-would-i-go-with-k-1">How far would I go with k?</a></li>
+  </ul></li>
+  <li><a href="#image3" id="toc-image3" class="nav-link" data-scroll-target="#image3">image3</a>
+  <ul class="collapse">
+  <li><a href="#the-original-then-k-1-through-10-2" id="toc-the-original-then-k-1-through-10-2" class="nav-link" data-scroll-target="#the-original-then-k-1-through-10-2">The original, then k = 1 through 10</a></li>
+  <li><a href="#going-past-k-10-2" id="toc-going-past-k-10-2" class="nav-link" data-scroll-target="#going-past-k-10-2">Going past k = 10</a></li>
+  <li><a href="#error-at-every-k-from-1-to-345" id="toc-error-at-every-k-from-1-to-345" class="nav-link" data-scroll-target="#error-at-every-k-from-1-to-345">Error at every k from 1 to 345</a></li>
+  <li><a href="#the-first-eigenvector-and-the-first-score-vector-2" id="toc-the-first-eigenvector-and-the-first-score-vector-2" class="nav-link" data-scroll-target="#the-first-eigenvector-and-the-first-score-vector-2">The first eigenvector and the first score vector</a></li>
+  <li><a href="#reading-u1-and-z1-2" id="toc-reading-u1-and-z1-2" class="nav-link" data-scroll-target="#reading-u1-and-z1-2">Reading u1 and z1</a></li>
+  <li><a href="#how-far-would-i-go-with-k-2" id="toc-how-far-would-i-go-with-k-2" class="nav-link" data-scroll-target="#how-far-would-i-go-with-k-2">How far would I go with k?</a></li>
+  </ul></li>
+  <li><a href="#image4" id="toc-image4" class="nav-link" data-scroll-target="#image4">image4</a>
+  <ul class="collapse">
+  <li><a href="#the-original-then-k-1-through-10-3" id="toc-the-original-then-k-1-through-10-3" class="nav-link" data-scroll-target="#the-original-then-k-1-through-10-3">The original, then k = 1 through 10</a></li>
+  <li><a href="#going-past-k-10-3" id="toc-going-past-k-10-3" class="nav-link" data-scroll-target="#going-past-k-10-3">Going past k = 10</a></li>
+  <li><a href="#error-at-every-k-from-1-to-119" id="toc-error-at-every-k-from-1-to-119" class="nav-link" data-scroll-target="#error-at-every-k-from-1-to-119">Error at every k from 1 to 119</a></li>
+  <li><a href="#the-first-eigenvector-and-the-first-score-vector-3" id="toc-the-first-eigenvector-and-the-first-score-vector-3" class="nav-link" data-scroll-target="#the-first-eigenvector-and-the-first-score-vector-3">The first eigenvector and the first score vector</a></li>
+  <li><a href="#reading-u1-and-z1-3" id="toc-reading-u1-and-z1-3" class="nav-link" data-scroll-target="#reading-u1-and-z1-3">Reading u1 and z1</a></li>
+  <li><a href="#how-far-would-i-go-with-k-3" id="toc-how-far-would-i-go-with-k-3" class="nav-link" data-scroll-target="#how-far-would-i-go-with-k-3">How far would I go with k?</a></li>
+  </ul></li>
+  <li><a href="#rebuilding-this-page" id="toc-rebuilding-this-page" class="nav-link" data-scroll-target="#rebuilding-this-page">Rebuilding this page</a></li>
+  </ul>
+</nav>
+</div>
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Image Compression with Principal Components</h1>
+<p class="subtitle lead">Rank-k approximation on the uncentered cross product X’X</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Kyle Fraund </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">September 25, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="what-this-page-is" class="level2">
+<h2 class="anchored" data-anchor-id="what-this-page-is">What this page is</h2>
+<p>Each of the four images below is a numeric matrix <span class="math inline">\(X\)</span>, one entry per pixel, <span class="math inline">\(n\)</span> rows by <span class="math inline">\(p\)</span> columns. I decompose each one without centering or scaling,</p>
+<p><span class="math display">\[V = X'X, \qquad V = U \Lambda U', \qquad Z = XU, \qquad X = ZU'\]</span></p>
+<p>and then throw away all but the first <span class="math inline">\(k\)</span> components:</p>
+<p><span class="math display">\[X_{(k)} = z_1u_1' + z_2u_2' + \cdots + z_ku_k',
+\qquad \text{Error}(k) = \lVert X - X_{(k)} \rVert_F .\]</span></p>
+<p>Because <span class="math inline">\(U\)</span> is orthonormal, <span class="math inline">\(UU' = I\)</span> and <span class="math inline">\(X = ZU'\)</span> holds exactly, so setting <span class="math inline">\(k = p\)</span> hands back the original image untouched. Any smaller <span class="math inline">\(k\)</span> drops the directions that contribute least to <span class="math inline">\(\operatorname{trace}(X'X)\)</span>, and the whole question is how many of them you can drop before you notice.</p>
+<p>It matters that nothing is centered. <code>prcomp()</code> subtracts column means by default, and once it does, <span class="math inline">\(ZU'\)</span> reconstructs <span class="math inline">\(X\)</span> minus those means rather than <span class="math inline">\(X\)</span> itself, so the reconstruction is no longer the image. Everything here goes through <code>eigen(crossprod(x), symmetric = TRUE)</code> instead.</p>
+<p>A note on the data, since it changes how the plots read: these pixel values aren’t on a 0-255 scale. They’re roughly zero-centered floats, some negative. That means <span class="math inline">\(X'X\)</span> is picking up energy, or distance from mid-grey, rather than brightness, which is why the first eigenvector doesn’t always look like an average column the way you might expect.</p>
+</section>
+<section id="part-1-the-compression-function" class="level2">
+<h2 class="anchored" data-anchor-id="part-1-the-compression-function">Part 1: the compression function</h2>
+<p>Here is <code>R/pca_compress.R</code> in full.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>pca_decomp <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.matrix</span>(x) <span class="sc">||</span> <span class="sc">!</span><span class="fu">is.numeric</span>(x)) {</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="st">"`x` must be a numeric matrix."</span>, <span class="at">call. =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">anyNA</span>(x)) {</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="st">"`x` contains NA/NaN; eigen() cannot handle missing pixels."</span>, <span class="at">call. =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  V <span class="ot">&lt;-</span> <span class="fu">crossprod</span>(x)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  e <span class="ot">&lt;-</span> <span class="fu">eigen</span>(V, <span class="at">symmetric =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>  lambda <span class="ot">&lt;-</span> <span class="fu">pmax</span>(e<span class="sc">$</span>values, <span class="dv">0</span>)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">U =</span> e<span class="sc">$</span>vectors, <span class="at">lambda =</span> lambda, <span class="at">Z =</span> x <span class="sc">%*%</span> e<span class="sc">$</span>vectors)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>pca_compress <span class="ot">&lt;-</span> <span class="cf">function</span>(x, k, <span class="at">decomp =</span> <span class="cn">NULL</span>) {</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.matrix</span>(x) <span class="sc">||</span> <span class="sc">!</span><span class="fu">is.numeric</span>(x)) {</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="st">"`x` must be a numeric matrix."</span>, <span class="at">call. =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>  p <span class="ot">&lt;-</span> <span class="fu">ncol</span>(x)</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (p <span class="sc">==</span> <span class="dv">0</span>L <span class="sc">||</span> <span class="fu">nrow</span>(x) <span class="sc">==</span> <span class="dv">0</span>L) {</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="st">"`x` must have at least one row and one column."</span>, <span class="at">call. =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.numeric</span>(k) <span class="sc">||</span> <span class="fu">length</span>(k) <span class="sc">!=</span> <span class="dv">1</span>L <span class="sc">||</span> <span class="fu">is.na</span>(k)) {</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="st">"`k` must be a single non-missing number."</span>, <span class="at">call. =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (k <span class="sc">!=</span> <span class="fu">as.integer</span>(k)) {</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="st">"`k` must be a whole number."</span>, <span class="at">call. =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>  k <span class="ot">&lt;-</span> <span class="fu">as.integer</span>(k)</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (k <span class="sc">&lt;</span> <span class="dv">1</span>L <span class="sc">||</span> k <span class="sc">&gt;</span> p) {</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">sprintf</span>(<span class="st">"`k` must be between 1 and ncol(x) = %d; got %d."</span>, p, k),</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>         <span class="at">call. =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(decomp)) {</span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    decomp <span class="ot">&lt;-</span> <span class="fu">pca_decomp</span>(x)</span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">all</span>(<span class="fu">c</span>(<span class="st">"U"</span>, <span class="st">"lambda"</span>, <span class="st">"Z"</span>) <span class="sc">%in%</span> <span class="fu">names</span>(decomp)) <span class="sc">||</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>             <span class="fu">ncol</span>(decomp<span class="sc">$</span>U) <span class="sc">!=</span> p <span class="sc">||</span> <span class="fu">nrow</span>(decomp<span class="sc">$</span>Z) <span class="sc">!=</span> <span class="fu">nrow</span>(x)) {</span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="st">"`decomp` does not match `x`; pass pca_decomp(x) or leave it NULL."</span>,</span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>         <span class="at">call. =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>  Zk <span class="ot">&lt;-</span> decomp<span class="sc">$</span>Z[, <span class="fu">seq_len</span>(k), drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>  Uk <span class="ot">&lt;-</span> decomp<span class="sc">$</span>U[, <span class="fu">seq_len</span>(k), drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>  xk <span class="ot">&lt;-</span> Zk <span class="sc">%*%</span> <span class="fu">t</span>(Uk)</span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="at">approximation =</span> xk,</span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="at">error         =</span> <span class="fu">norm</span>(x <span class="sc">-</span> xk, <span class="at">type =</span> <span class="st">"F"</span>),</span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>    <span class="at">k             =</span> k,</span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="at">decomp        =</span> decomp</span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>pca_error_curve <span class="ot">&lt;-</span> <span class="cf">function</span>(x, <span class="at">decomp =</span> <span class="cn">NULL</span>) {</span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(decomp)) decomp <span class="ot">&lt;-</span> <span class="fu">pca_decomp</span>(x)</span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>  p <span class="ot">&lt;-</span> <span class="fu">ncol</span>(x)</span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>  resid <span class="ot">&lt;-</span> x</span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>  err   <span class="ot">&lt;-</span> <span class="fu">numeric</span>(p)</span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">seq_len</span>(p)) {</span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>    resid  <span class="ot">&lt;-</span> resid <span class="sc">-</span> <span class="fu">tcrossprod</span>(decomp<span class="sc">$</span>Z[, k], decomp<span class="sc">$</span>U[, k])</span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>    err[k] <span class="ot">&lt;-</span> <span class="fu">norm</span>(resid, <span class="at">type =</span> <span class="st">"F"</span>)</span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>  err</span>
+<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a>pca_compression_ratio <span class="ot">&lt;-</span> <span class="cf">function</span>(n, p, k) {</span>
+<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a>  stored   <span class="ot">&lt;-</span> (n <span class="sc">+</span> p) <span class="sc">*</span> k</span>
+<span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a>  original <span class="ot">&lt;-</span> n <span class="sc">*</span> p</span>
+<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">stored   =</span> stored,</span>
+<span id="cb1-77"><a href="#cb1-77" aria-hidden="true" tabindex="-1"></a>       <span class="at">original =</span> original,</span>
+<span id="cb1-78"><a href="#cb1-78" aria-hidden="true" tabindex="-1"></a>       <span class="at">ratio    =</span> stored <span class="sc">/</span> original,</span>
+<span id="cb1-79"><a href="#cb1-79" aria-hidden="true" tabindex="-1"></a>       <span class="at">saving   =</span> <span class="dv">1</span> <span class="sc">-</span> stored <span class="sc">/</span> original)</span>
+<span id="cb1-80"><a href="#cb1-80" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><code>pca_compress(x, k)</code> is the piece the assignment asks for. It checks its inputs, decomposes <span class="math inline">\(X'X\)</span>, truncates to <span class="math inline">\(k\)</span> components and returns both the rank-<span class="math inline">\(k\)</span> matrix and its Frobenius error. Input validation rejects a non-numeric or non-matrix <code>x</code>, a <code>k</code> that isn’t a single whole number, and any <code>k</code> outside <span class="math inline">\(1 \le k \le p\)</span>. The approximation itself is the one-line matrix product <code>Z[, 1:k] %*% t(U[, 1:k])</code>, with <code>drop = FALSE</code> so that <span class="math inline">\(k = 1\)</span> stays a matrix instead of collapsing to a vector.</p>
+<p>The other three functions exist for speed and convenience:</p>
+<ul>
+<li><code>pca_decomp(x)</code> does the eigendecomposition and returns <code>U</code>, <code>lambda</code> and <code>Z = XU</code>. You can hand the result back to <code>pca_compress()</code> through its <code>decomp</code> argument, which matters here because this page needs an error for every <span class="math inline">\(k\)</span> from 1 to <span class="math inline">\(p\)</span> and redoing an <span class="math inline">\(O(p^3)\)</span> eigendecomposition a few hundred times would be silly. <code>crossprod(x)</code> is used rather than <code>t(x) %*% x</code> because it’s about twice as fast, and <code>symmetric = TRUE</code> forces the real-symmetric LAPACK routine, which guarantees a genuinely orthonormal <span class="math inline">\(U\)</span> and returns the eigenvalues already sorted largest first.</li>
+<li><code>pca_error_curve(x)</code> walks <span class="math inline">\(k\)</span> from 1 to <span class="math inline">\(p\)</span> accumulating rank-one updates, <span class="math inline">\(X_{(k)} = X_{(k-1)} + z_ku_k'\)</span>. Rebuilding each approximation from scratch would cost <span class="math inline">\(O(np^3)\)</span> across the sweep; this way it’s <span class="math inline">\(O(np^2)\)</span>. These are real <code>norm(..., type = "F")</code> values on the residual, not the <span class="math inline">\(\sqrt{\sum \lambda}\)</span> shortcut, which is the point of the second check below.</li>
+<li><code>pca_compression_ratio(n, p, k)</code> is the storage arithmetic: <span class="math inline">\((n+p)k\)</span> numbers kept against <span class="math inline">\(np\)</span> in the raw image.</li>
+</ul>
+<section id="does-it-actually-work" class="level3">
+<h3 class="anchored" data-anchor-id="does-it-actually-work">Does it actually work?</h3>
+<p>Three things have to be true, and all three are checked on the real data rather than asserted:</p>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>=== image1  (n = 1000, p = 100) ===
+1. Error(k = p) = 4.1487e-12   vs  ||X||_F = 705.46   -&gt; relative 5.88e-15
+2. max_k |Error(k) - sqrt(sum lambda_{k+1..p})| = 4.1487e-12
+   e.g. k = 5 : Error = 303.387356 , sqrt(tail) = 303.387356
+3. Error monotone non-increasing: TRUE  (largest step up = -2.443e+00)</code></pre>
+</div>
+</div>
+<p>Keeping every component reproduces the image to fifteen significant figures, the Frobenius error agrees with the square root of the discarded eigenvalues to within floating-point noise, and the error never goes up as <span class="math inline">\(k\)</span> grows. There’s also a separate test file, <code>tests/test_pca_compress.R</code>, that runs seventeen checks on throwaway matrices, including the input validation and both the <span class="math inline">\(n &lt; p\)</span> and <span class="math inline">\(n &gt; p\)</span> cases.</p>
+</section>
+</section>
+<section id="part-2-the-images" class="level2">
+<h2 class="anchored" data-anchor-id="part-2-the-images">Part 2: the images</h2>
+</section>
+<section id="image1" class="level2">
+<h2 class="anchored" data-anchor-id="image1">image1</h2>
+<p>1000 rows by 100 columns, values running from -4.17 to 22.5. The first component carries 80.19% of <code>trace(X'X)</code>, and the first ten carry 83.04%.</p>
+<section id="the-original-then-k-1-through-10" class="level3">
+<h3 class="anchored" data-anchor-id="the-original-then-k-1-through-10">The original, then k = 1 through 10</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-6-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Every panel is drawn on the original image’s grey scale, so what you see is a like-for-like comparison. A side effect is that where a reconstruction overshoots past the original’s brightest pixel, it clips to pure white.</p>
+</section>
+<section id="going-past-k-10" class="level3">
+<h3 class="anchored" data-anchor-id="going-past-k-10">Going past k = 10</h3>
+<p>Ten components isn’t always enough to judge where to stop, so here is the same image at a wider spread of <span class="math inline">\(k\)</span>, finishing at <span class="math inline">\(k = p\)</span>, which is exact.</p>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-7-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Titles give <span class="math inline">\(\text{Error}(k)\)</span> as a fraction of <span class="math inline">\(\lVert X \rVert_F\)</span>.</p>
+</section>
+<section id="error-at-every-k-from-1-to-100" class="level3">
+<h3 class="anchored" data-anchor-id="error-at-every-k-from-1-to-100">Error at every k from 1 to 100</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-8-1.png" class="img-fluid figure-img" width="1105"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output-display">
+<table class="table table-sm table-striped small">
+<caption>image1 — error and storage cost at selected k. The residual column is Error(k) divided by ||X||_F.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: right;">k</th>
+<th style="text-align: right;">Error(k)</th>
+<th style="text-align: left;">% of Error(1)</th>
+<th style="text-align: left;">rel. residual</th>
+<th style="text-align: left;">storage vs raw</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">313.96</td>
+<td style="text-align: left;">100.0%</td>
+<td style="text-align: left;">0.4450</td>
+<td style="text-align: left;">1.1%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">311.28</td>
+<td style="text-align: left;">99.1%</td>
+<td style="text-align: left;">0.4412</td>
+<td style="text-align: left;">2.2%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">308.62</td>
+<td style="text-align: left;">98.3%</td>
+<td style="text-align: left;">0.4375</td>
+<td style="text-align: left;">3.3%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">303.39</td>
+<td style="text-align: left;">96.6%</td>
+<td style="text-align: left;">0.4301</td>
+<td style="text-align: left;">5.5%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">290.56</td>
+<td style="text-align: left;">92.5%</td>
+<td style="text-align: left;">0.4119</td>
+<td style="text-align: left;">11.0%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">265.64</td>
+<td style="text-align: left;">84.6%</td>
+<td style="text-align: left;">0.3765</td>
+<td style="text-align: left;">22.0%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">216.36</td>
+<td style="text-align: left;">68.9%</td>
+<td style="text-align: left;">0.3067</td>
+<td style="text-align: left;">44.0%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">80</td>
+<td style="text-align: right;">108.95</td>
+<td style="text-align: left;">34.7%</td>
+<td style="text-align: left;">0.1544</td>
+<td style="text-align: left;">88.0%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">110.0%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="the-first-eigenvector-and-the-first-score-vector" class="level3">
+<h3 class="anchored" data-anchor-id="the-first-eigenvector-and-the-first-score-vector">The first eigenvector and the first score vector</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-10-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Numbers behind those two curves, which the discussion below refers back to:</p>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>u1 : 1.0% of its 100 entries are positive; range [-0.0079, 0.9989];
+      largest-magnitude entry at column 78; dispersion sd/mean|u1| = 6.935
+z1 : range [16.9, 22.6]; largest magnitude at row 141; minimum at row 28
+      (rows are numbered from the top of the image)</code></pre>
+</div>
+</div>
+</section>
+<section id="reading-u1-and-z1" class="level3">
+<h3 class="anchored" data-anchor-id="reading-u1-and-z1">Reading u1 and z1</h3>
+<p><code>u1</code> isn’t really a profile. It’s a spike. For 99 of the 100 pixel columns it sits within rounding distance of zero, hugging the axis somewhere between -0.008 and 0.008, and then at column 78 it jumps to 0.9989. The next largest entry anywhere in the vector is 0.0079, smaller by a factor of 126. When a unit eigenvector puts essentially all of its length on a single coordinate, it’s telling you the dominant column profile is that one column and nothing else.</p>
+<p><code>z1</code> says the same thing from the other side. It’s a flat band of noise centred on 19.95 with a standard deviation of only 0.96, drifting between about 17 and 22.6 with no trend and no visible structure from the first row to the thousandth. Since <code>z1</code> measures how strongly each row expresses <code>u1</code>, a constant <code>z1</code> means every row expresses it equally. Column 78 is uniformly bright the whole way down, and the small wobble in <code>z1</code> is just that column’s own noise.</p>
+<p>So the rank-1 approximation is a single vertical stripe, and that really is all the structure this image has. The column means confirm it: column 78 averages 19.93 while every other column averages somewhere between -0.16 and 0.00, and all 100 columns have a standard deviation near 1. This is standard normal noise with a constant of about 20 added to one column. The k = 1 panel shows that stripe, and k = 2 through 10 are indistinguishable from it, because after the first component there’s nothing left but noise to fit.</p>
+</section>
+<section id="how-far-would-i-go-with-k" class="level3">
+<h3 class="anchored" data-anchor-id="how-far-would-i-go-with-k">How far would I go with k?</h3>
+<p>k = 1, and I’d argue it’s the only defensible answer here. Not because the reconstruction is good, but because nothing better is on offer at any price.</p>
+<p>The error curve makes the case. Error(1) is already down to 0.445 of <span class="math inline">\(\lVert X \rVert_F\)</span>, so that one stripe accounts for 55% of the image’s total magnitude in a single step. After that the curve is a straight line. It sheds roughly 0.86% of its remaining height per component from k = 1 to k = 6, drifts down more or less linearly through the middle, and only falls off a cliff in the last handful of components. There’s no elbow anywhere, no point where it flattens out and tells you to stop. A straight error curve is what isotropic noise looks like: every remaining direction holds about the same energy, so no place to cut is better than any other.</p>
+<p>The eigenvalues put it more bluntly. <span class="math inline">\(\lambda_1 = 3.99 \times 10^5\)</span> against <span class="math inline">\(\lambda_2 = 1.68 \times 10^3\)</span>, a 238-fold gap, and then <span class="math inline">\(\lambda_2\)</span> through <span class="math inline">\(\lambda_6\)</span> come in at 1680, 1650, 1610, 1590 and 1590, which is to say they’re all the same number. One real component, ninety-nine noise components.</p>
+<p>Two more reasons to stay put. Visually, the k = 15 through k = 60 panels look like k = 1, because you can’t see noise being reconstructed at this scale, so extra components buy nothing you can perceive. And the storage arithmetic caps the whole exercise anyway: <span class="math inline">\((n+p)k / np = 1100k / 100{,}000\)</span> crosses 100% at k = 91, meaning from there on the compressed form is bigger than the image it replaces. Even at the very top of the usable range the error has only fallen from 0.445 to about 0.12, which is nowhere near faithful.</p>
+<p>k = 1 costs 1.1% of the original storage and captures everything that’s actually there. Everything after it is paying full freight to memorise noise.</p>
+</section>
+</section>
+<section id="image2" class="level2">
+<h2 class="anchored" data-anchor-id="image2">image2</h2>
+<p>1000 rows by 100 columns, values running from -694 to 615. The first component carries 100.00% of <code>trace(X'X)</code>, and the first ten carry 100.00%.</p>
+<section id="the-original-then-k-1-through-10-1" class="level3">
+<h3 class="anchored" data-anchor-id="the-original-then-k-1-through-10-1">The original, then k = 1 through 10</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-19-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Every panel is drawn on the original image’s grey scale, so what you see is a like-for-like comparison. A side effect is that where a reconstruction overshoots past the original’s brightest pixel, it clips to pure white.</p>
+</section>
+<section id="going-past-k-10-1" class="level3">
+<h3 class="anchored" data-anchor-id="going-past-k-10-1">Going past k = 10</h3>
+<p>Ten components isn’t always enough to judge where to stop, so here is the same image at a wider spread of <span class="math inline">\(k\)</span>, finishing at <span class="math inline">\(k = p\)</span>, which is exact.</p>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-20-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Titles give <span class="math inline">\(\text{Error}(k)\)</span> as a fraction of <span class="math inline">\(\lVert X \rVert_F\)</span>.</p>
+</section>
+<section id="error-at-every-k-from-1-to-100-1" class="level3">
+<h3 class="anchored" data-anchor-id="error-at-every-k-from-1-to-100-1">Error at every k from 1 to 100</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-21-1.png" class="img-fluid figure-img" width="1105"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output-display">
+<table class="table table-sm table-striped small">
+<caption>image2 — error and storage cost at selected k. The residual column is Error(k) divided by ||X||_F.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: right;">k</th>
+<th style="text-align: right;">Error(k)</th>
+<th style="text-align: left;">% of Error(1)</th>
+<th style="text-align: left;">rel. residual</th>
+<th style="text-align: left;">storage vs raw</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">2.05</td>
+<td style="text-align: left;">100.0%</td>
+<td style="text-align: left;">0.0001</td>
+<td style="text-align: left;">1.1%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">2.2%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">3.3%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">5.5%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">11.0%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">22.0%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">44.0%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">80</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">88.0%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">110.0%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="the-first-eigenvector-and-the-first-score-vector-1" class="level3">
+<h3 class="anchored" data-anchor-id="the-first-eigenvector-and-the-first-score-vector-1">The first eigenvector and the first score vector</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-23-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Numbers behind those two curves, which the discussion below refers back to:</p>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>u1 : 100.0% of its 100 entries are positive; range [0.0006, 0.1722];
+      largest-magnitude entry at column 100; dispersion sd/mean|u1| = 0.580
+z1 : range [-4033.8, 3570.3]; largest magnitude at row 437; minimum at row 437
+      (rows are numbered from the top of the image)</code></pre>
+</div>
+</div>
+</section>
+<section id="reading-u1-and-z1-1" class="level3">
+<h3 class="anchored" data-anchor-id="reading-u1-and-z1-1">Reading u1 and z1</h3>
+<p><code>u1</code> is a straight line. It climbs from 0.0006 at column 1 to 0.1722 at column 100 with no curvature I can see, and regressing it on the column index gives an <span class="math inline">\(R^2\)</span> of 0.99992. Every entry is positive. The dominant column profile is just a ramp from left to right: whatever a row contains, it contains a lot more of it at the right edge than at the left.</p>
+<p><code>z1</code> is the opposite in character. It’s row-to-row noise, swinging between -4034 and 3570 with a standard deviation of 1188 and a lag-1 autocorrelation of 0.02, meaning one row tells you nothing at all about the next. It takes both signs freely.</p>
+<p>Together those two explain the banding you can see in the original. Every row is the same ramp, scaled by its own random number. Rows with a positive <code>z1</code> run dark on the left to bright on the right, rows with a negative <code>z1</code> run the other way, and rows near zero come out flat grey. Stack a thousand of those in random order and you get exactly the dense horizontal striping the image shows. The correlation between <code>z1</code> and the row means is 1.0000, so <code>z1</code> is nothing more than each row’s overall level.</p>
+<p>This image is an outer product with a bit of dressing: a random row vector times a linear column ramp.</p>
+</section>
+<section id="how-far-would-i-go-with-k-1" class="level3">
+<h3 class="anchored" data-anchor-id="how-far-would-i-go-with-k-1">How far would I go with k?</h3>
+<p>k = 2, and for once this isn’t really a judgment call. It’s a fact about the matrix.</p>
+<p>The rank of <span class="math inline">\(X\)</span> is 2. The eigenvalues go <span class="math inline">\(\lambda_1 = 1.41 \times 10^9\)</span>, <span class="math inline">\(\lambda_2 = 4.2\)</span>, and then <span class="math inline">\(\lambda_3 = 1.09 \times 10^{-7}\)</span>, which is a drop of eight orders of magnitude into what is plainly floating-point dust. Error(2) comes out at <span class="math inline">\(3.5 \times 10^{-9}\)</span> against <span class="math inline">\(\lVert X \rVert_F = 37{,}539\)</span>, so two components reproduce the image exactly as far as double precision can tell. The error curve is flat on the floor from k = 2 onward and the k = 3 through 10 panels aren’t approximations of anything, they’re the original.</p>
+<p>The question worth asking is whether k = 1 would do, and visually it would. Error(1) is 2.05 in absolute terms, which is 0.0055% of <span class="math inline">\(\lVert X \rVert_F\)</span>, and the k = 1 panel is indistinguishable from the original by eye. That second component is carrying a correction small enough that nobody would miss it.</p>
+<p>I’d still take k = 2, because exactness is nearly free. k = 1 stores 1,100 numbers, or 1.1% of the raw 100,000; k = 2 stores 2,200, or 2.2%. For an extra 1,100 numbers, about a hundredth of the original image, the approximation stops being an approximation at all. Choosing the lossy version to save 1.1% strikes me as a bad trade.</p>
+<p>One thing worth noticing next to image1. Both matrices are 1000 by 100, and in both the first component dominates the trace. The difference is what’s left behind: here the remaining 98 directions are genuinely empty, there they were full of noise. It’s the size of the gap between <span class="math inline">\(\lambda_1\)</span> and <span class="math inline">\(\lambda_2\)</span> that separates the two cases, not the share the first component holds.</p>
+</section>
+</section>
+<section id="image3" class="level2">
+<h2 class="anchored" data-anchor-id="image3">image3</h2>
+<p>376 rows by 345 columns, values running from -2.2 to 1.52. The first component carries 61.78% of <code>trace(X'X)</code>, and the first ten carry 95.17%.</p>
+<section id="the-original-then-k-1-through-10-2" class="level3">
+<h3 class="anchored" data-anchor-id="the-original-then-k-1-through-10-2">The original, then k = 1 through 10</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-32-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Every panel is drawn on the original image’s grey scale, so what you see is a like-for-like comparison. A side effect is that where a reconstruction overshoots past the original’s brightest pixel, it clips to pure white.</p>
+</section>
+<section id="going-past-k-10-2" class="level3">
+<h3 class="anchored" data-anchor-id="going-past-k-10-2">Going past k = 10</h3>
+<p>Ten components isn’t always enough to judge where to stop, so here is the same image at a wider spread of <span class="math inline">\(k\)</span>, finishing at <span class="math inline">\(k = p\)</span>, which is exact.</p>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-33-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Titles give <span class="math inline">\(\text{Error}(k)\)</span> as a fraction of <span class="math inline">\(\lVert X \rVert_F\)</span>.</p>
+</section>
+<section id="error-at-every-k-from-1-to-345" class="level3">
+<h3 class="anchored" data-anchor-id="error-at-every-k-from-1-to-345">Error at every k from 1 to 345</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-34-1.png" class="img-fluid figure-img" width="1105"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output-display">
+<table class="table table-sm table-striped small">
+<caption>image3 — error and storage cost at selected k. The residual column is Error(k) divided by ||X||_F.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: right;">k</th>
+<th style="text-align: right;">Error(k)</th>
+<th style="text-align: left;">% of Error(1)</th>
+<th style="text-align: left;">rel. residual</th>
+<th style="text-align: left;">storage vs raw</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">222.67</td>
+<td style="text-align: left;">100.0%</td>
+<td style="text-align: left;">0.6182</td>
+<td style="text-align: left;">0.6%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">176.02</td>
+<td style="text-align: left;">79.1%</td>
+<td style="text-align: left;">0.4887</td>
+<td style="text-align: left;">1.1%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">150.01</td>
+<td style="text-align: left;">67.4%</td>
+<td style="text-align: left;">0.4165</td>
+<td style="text-align: left;">1.7%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">119.30</td>
+<td style="text-align: left;">53.6%</td>
+<td style="text-align: left;">0.3312</td>
+<td style="text-align: left;">2.8%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">79.13</td>
+<td style="text-align: left;">35.5%</td>
+<td style="text-align: left;">0.2197</td>
+<td style="text-align: left;">5.6%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">49.56</td>
+<td style="text-align: left;">22.3%</td>
+<td style="text-align: left;">0.1376</td>
+<td style="text-align: left;">11.1%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">31.70</td>
+<td style="text-align: left;">14.2%</td>
+<td style="text-align: left;">0.0880</td>
+<td style="text-align: left;">22.2%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">80</td>
+<td style="text-align: right;">19.79</td>
+<td style="text-align: left;">8.9%</td>
+<td style="text-align: left;">0.0550</td>
+<td style="text-align: left;">44.5%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">345</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">191.8%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="the-first-eigenvector-and-the-first-score-vector-2" class="level3">
+<h3 class="anchored" data-anchor-id="the-first-eigenvector-and-the-first-score-vector-2">The first eigenvector and the first score vector</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-36-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Numbers behind those two curves, which the discussion below refers back to:</p>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>u1 : 100.0% of its 345 entries are positive; range [0.0201, 0.0778];
+      largest-magnitude entry at column 263; dispersion sd/mean|u1| = 0.360
+z1 : range [-28.2, 17.8]; largest magnitude at row 122; minimum at row 122
+      (rows are numbered from the top of the image)</code></pre>
+</div>
+</div>
+</section>
+<section id="reading-u1-and-z1-2" class="level3">
+<h3 class="anchored" data-anchor-id="reading-u1-and-z1-2">Reading u1 and z1</h3>
+<p>This one is an actual photograph, a puppy lying against a sleeve and a light bedspread, so unlike the first two images the leading component is describing real picture content.</p>
+<p><code>u1</code> stays positive across all 345 columns but swings by about a factor of four, from 0.0201 up to 0.0778. The shape is what’s interesting. It’s low and fairly flat, around 0.020 to 0.030, across columns 1 to 75, then climbs steeply and stays high through the middle of the frame: a broad plateau near 0.065 around columns 90 to 130, a peak of 0.075 at column 162, a dip to 0.048 near column 213, its maximum of 0.0778 at column 263, and then a slide back down to 0.029 at the right edge. Line those ranges up against the original and they make sense. The quiet left-hand region is the evenly lit bedding and sleeve; the raised middle and right is where the dog actually is.</p>
+<p>Worth remembering that the pixel values here are roughly zero-centred, running from -2.20 to 1.52, so <span class="math inline">\(X'X\)</span> is measuring energy rather than brightness. That means <code>u1</code> reads as a contrast profile. It’s large exactly where a column contains strong departures from mid-grey, which is the dark fur and the white chest and paw, and small where a column is uniformly mid-toned.</p>
+<p><code>z1</code> is much easier to read. It’s essentially row brightness, correlating 0.9963 with the row means. It starts at 7, rises to about 12 by row 30, crosses zero near row 62, drops to its minimum of -28 somewhere around rows 100 to 130, climbs back through zero near row 215, wobbles for a while, then rises steadily to 17 by the bottom of the frame. That’s a fair description of the photograph read top to bottom: light background up top, the dark mass of the dog filling the band from roughly row 62 to row 215, and the bright bedspread across the bottom third. The longest unbroken run of negative <code>z1</code> is rows 62 to 215, 154 rows, which is the dog.</p>
+<p>So the rank-1 image is a horizontal three-band brightness pattern, light then dark then light, modulated by a fixed left-to-right contrast profile. That’s precisely what the k = 1 panel looks like: no shapes at all, just banding. The dog’s outline doesn’t show up until k = 3 or 4, and the eye and muzzle not until around k = 8.</p>
+</section>
+<section id="how-far-would-i-go-with-k-2" class="level3">
+<h3 class="anchored" data-anchor-id="how-far-would-i-go-with-k-2">How far would I go with k?</h3>
+<p>I’d stop at k = 40.</p>
+<p>There’s no sharp elbow in this error curve. It’s a smooth convex decay, which is what you get from a natural photograph, because real images spread their energy across many scales instead of concentrating it in a few directions. So the decision has to come from looking at the pictures, with the curve as a check.</p>
+<p>Working through the panels: k = 10, at a relative error of 0.220, is clearly a dog but soft, with obvious vertical banding and a face you can’t resolve. k = 20 at 0.138 has a readable eye, but the fur is smeared and the bedding is visibly striped. k = 30 at 0.106 is the first panel I’d call a good likeness, with the eye, muzzle, ear boundary and the fold in the bedspread all in the right place. k = 40 at 0.088 tidies up what k = 30 leaves behind: the residual banding in the bedding mostly goes away and fur texture starts to be there rather than merely implied. Beyond that the returns collapse. k = 60 at 0.068 is better on fine texture, but I had to put the two side by side to see it, and it isn’t a difference that would change what anyone could tell you about the photo.</p>
+<p>The storage numbers point the same way. With <span class="math inline">\(n = 376\)</span> and <span class="math inline">\(p = 345\)</span>, storage is <span class="math inline">\(721k / 129{,}720\)</span>, so k = 20 costs 11.1% of the raw image, k = 30 costs 16.7%, k = 40 costs 22.2% and k = 60 costs 33.4%. Going from 30 to 40 buys a visible improvement for 5.5 points of storage. Going from 40 to 60 costs another 11 points for something I can barely make out. That asymmetry is where I’d draw the line.</p>
+<p>Break-even, where the compressed form stops being smaller than the original, lands at <span class="math inline">\(k = np/(n+p) = 180\)</span>, so k = 40 leaves plenty of headroom. This image compresses genuinely well: a 78% cut in stored numbers for an 8.8% Frobenius error and a picture that still reads as the same photograph.</p>
+<p>One caveat that’s visible in the panels and worth saying out loud. Scattered pure-white speckles appear in the dark fur from k = 4 onward and are still there at k = 60. They aren’t a plotting artefact. They’re places where the reconstruction overshoots above the original’s brightest pixel, and since every panel is drawn on the original’s grey scale they clip to white. They shrink as k grows, and they’re a reminder that a rank-k approximation isn’t constrained to stay inside the original range of values.</p>
+</section>
+</section>
+<section id="image4" class="level2">
+<h2 class="anchored" data-anchor-id="image4">image4</h2>
+<p>213 rows by 119 columns, values running from -2.66 to 6.41. The first component carries 40.50% of <code>trace(X'X)</code>, and the first ten carry 93.94%.</p>
+<section id="the-original-then-k-1-through-10-3" class="level3">
+<h3 class="anchored" data-anchor-id="the-original-then-k-1-through-10-3">The original, then k = 1 through 10</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-45-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Every panel is drawn on the original image’s grey scale, so what you see is a like-for-like comparison. A side effect is that where a reconstruction overshoots past the original’s brightest pixel, it clips to pure white.</p>
+</section>
+<section id="going-past-k-10-3" class="level3">
+<h3 class="anchored" data-anchor-id="going-past-k-10-3">Going past k = 10</h3>
+<p>Ten components isn’t always enough to judge where to stop, so here is the same image at a wider spread of <span class="math inline">\(k\)</span>, finishing at <span class="math inline">\(k = p\)</span>, which is exact.</p>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-46-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Titles give <span class="math inline">\(\text{Error}(k)\)</span> as a fraction of <span class="math inline">\(\lVert X \rVert_F\)</span>.</p>
+</section>
+<section id="error-at-every-k-from-1-to-119" class="level3">
+<h3 class="anchored" data-anchor-id="error-at-every-k-from-1-to-119">Error at every k from 1 to 119</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-47-1.png" class="img-fluid figure-img" width="1105"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output-display">
+<table class="table table-sm table-striped small">
+<caption>image4 — error and storage cost at selected k. The residual column is Error(k) divided by ||X||_F.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: right;">k</th>
+<th style="text-align: right;">Error(k)</th>
+<th style="text-align: left;">% of Error(1)</th>
+<th style="text-align: left;">rel. residual</th>
+<th style="text-align: left;">storage vs raw</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">122.81</td>
+<td style="text-align: left;">100.0%</td>
+<td style="text-align: left;">0.7714</td>
+<td style="text-align: left;">1.3%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">95.42</td>
+<td style="text-align: left;">77.7%</td>
+<td style="text-align: left;">0.5993</td>
+<td style="text-align: left;">2.6%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">83.08</td>
+<td style="text-align: left;">67.6%</td>
+<td style="text-align: left;">0.5218</td>
+<td style="text-align: left;">3.9%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">65.57</td>
+<td style="text-align: left;">53.4%</td>
+<td style="text-align: left;">0.4119</td>
+<td style="text-align: left;">6.5%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">39.19</td>
+<td style="text-align: left;">31.9%</td>
+<td style="text-align: left;">0.2462</td>
+<td style="text-align: left;">13.1%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">21.18</td>
+<td style="text-align: left;">17.2%</td>
+<td style="text-align: left;">0.1330</td>
+<td style="text-align: left;">26.2%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">10.84</td>
+<td style="text-align: left;">8.8%</td>
+<td style="text-align: left;">0.0681</td>
+<td style="text-align: left;">52.4%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">80</td>
+<td style="text-align: right;">3.01</td>
+<td style="text-align: left;">2.4%</td>
+<td style="text-align: left;">0.0189</td>
+<td style="text-align: left;">104.8%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">119</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: left;">0.0%</td>
+<td style="text-align: left;">0.0000</td>
+<td style="text-align: left;">155.9%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="the-first-eigenvector-and-the-first-score-vector-3" class="level3">
+<h3 class="anchored" data-anchor-id="the-first-eigenvector-and-the-first-score-vector-3">The first eigenvector and the first score vector</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-49-1.png" class="img-fluid figure-img" width="1300"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Numbers behind those two curves, which the discussion below refers back to:</p>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>u1 : 68.9% of its 119 entries are positive; range [-0.0449, 0.2179];
+      largest-magnitude entry at column 85; dispersion sd/mean|u1| = 1.202
+z1 : range [-10.1, 22.1]; largest magnitude at row 152; minimum at row 209
+      (rows are numbered from the top of the image)</code></pre>
+</div>
+</div>
+</section>
+<section id="reading-u1-and-z1-3" class="level3">
+<h3 class="anchored" data-anchor-id="reading-u1-and-z1-3">Reading u1 and z1</h3>
+<p>This is an overhead view: a diagonal track running from the upper right down toward the lower left across textured ground, with a bright elongated object sitting on it and a larger bright rectangle carrying dark markings lower in the frame.</p>
+<p><code>u1</code> has the most structure of the four, and it’s the only one that changes sign. It opens near 0.03 for columns 1 to 15, falls through zero around column 18, bottoms out at -0.045 across columns 33 to 40, comes back to zero near column 55, then rises very steeply to 0.155 by column 64 and on to its maximum of 0.218 at column 85, five times the size of anything in the left half, before dropping just as sharply back to 0.03 by column 96 and drifting near 0.045 out to the right edge. Only 68.9% of its entries are positive.</p>
+<p>A signed eigenvector is doing something different from the first three images. It’s encoding a contrast between two bands of columns rather than a profile they share. The narrow high-magnitude band at columns 60 to 95 is where both bright objects sit, and the negative lobe at columns 33 to 40 is the darker ground off to their left. The first component is effectively saying that these columns are bright when those ones are dark. That fits with the correlation between <code>u1</code> and the column means being 0.026, which is to say nothing at all. Unlike image3, this leading component isn’t a brightness profile.</p>
+<p><code>z1</code> is spiky rather than smooth. It hovers between -8 and 4 through most of the frame, with a sharp isolated peak of 10.5 at row 61 and a much bigger plateau reaching 22 across rows 140 to 155, then falls to -10 by row 210. Those two positive excursions are the two bright objects, the elongated one on the track near the top and the large marked rectangle below it. 61% of rows have a negative <code>z1</code>, so the default state of a row is no bright object, and <code>z1</code> only fires where there is one.</p>
+<p>Read together, the rank-1 approximation is a bright horizontal bar at the rows and columns where the largest bright object lives, which is exactly what the k = 1 panel gives you: the rectangle shows up as a crude glowing strip before any terrain is visible at all.</p>
+</section>
+<section id="how-far-would-i-go-with-k-3" class="level3">
+<h3 class="anchored" data-anchor-id="how-far-would-i-go-with-k-3">How far would I go with k?</h3>
+<p>I’d stop at k = 30, and here it’s the storage cost rather than the picture that decides it.</p>
+<p>This is the hardest of the four to compress, and the eigenvalues explain why. The first component holds only 40.5% of <span class="math inline">\(\operatorname{trace}(X'X)\)</span>, against 61.8% for image3 and over 80% for the two synthetic matrices. The content is mostly high-frequency ground texture, which isn’t low-rank in any direction. It takes 10 components to reach 93.9% and 20 to reach 98.2%.</p>
+<p>Visually the improvement is steady rather than sudden. k = 10, at a relative error of 0.246, gives you the bright objects and a vague sense of light and dark. k = 20 at 0.133 resolves them properly, but the ground is a smooth wash. k = 30 at 0.091 is where the diagonal track becomes a continuous, unmistakable feature and the small bright objects separate from one another. k = 40 at 0.068 brings the grainy ground texture back, and k = 60 at 0.037 is very close to the original.</p>
+<p>If storage were free I’d take 40 or 60. It isn’t. With <span class="math inline">\(n = 213\)</span> and <span class="math inline">\(p = 119\)</span> this is a small, nearly square matrix, and <span class="math inline">\((n+p)k / np = 332k / 25{,}347\)</span> grows fast: k = 20 costs 26.2% of the raw image, k = 30 costs 39.3%, k = 40 costs 52.4% and k = 60 costs 78.6%. Break-even, where the compressed form stops being smaller than just storing the pixels, arrives at only <span class="math inline">\(k = np/(n+p) = 76\)</span>. There’s far less room to work with here than in image3, where break-even sat at 180.</p>
+<p>So k = 40 would mean paying half the original storage to get texture back, and k = 60 would mean paying nearly four fifths, which is close to pointless. k = 30 keeps every feature that carries information, the track, both bright objects and the broad light and dark regions, for 39% of the storage and a 9.1% Frobenius error. That’s the last point on this curve where compressing is still clearly worth doing, which is why I wouldn’t push higher on this image even though I happily would on image3.</p>
+</section>
+</section>
+<section id="rebuilding-this-page" class="level2">
+<h2 class="anchored" data-anchor-id="rebuilding-this-page">Rebuilding this page</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">Rscript</span> tests/test_pca_compress.R</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">quarto</span> render</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

@@ -1,0 +1,103 @@
+## `r img_label`
+
+`r n` rows by `r p` columns, values running from
+`r sprintf("%.3g to %.3g", dsc$range_x[1], dsc$range_x[2])`.
+The first component carries
+`r sprintf("%.2f%%", 100 * dsc$var_share_1)` of `trace(X'X)`, and the first ten
+carry `r sprintf("%.2f%%", 100 * dsc$var_share_10)`.
+
+### The original, then k = 1 through 10
+
+```{r}
+#| echo: false
+#| fig-width: 10
+#| fig-height: !expr grid_h
+op <- par(mfrow = c(grid_nr, grid_nc), oma = c(0, 0, 0, 0))
+rk <- sum(dcm$lambda > max(dcm$lambda) * 1e-12)
+show_image(X, zlim = zl, cex_main = cexm,
+           main = if (grid_nc >= 8) sprintf("orig (rank %d)", rk)
+                  else sprintf("original (rank %d)", rk))
+for (k in 1:10) {
+  show_image(pca_compress(X, k, decomp = dcm)$approximation,
+             main = sprintf("k = %d", k), zlim = zl, cex_main = cexm)
+}
+for (i in seq_len(grid_nr * grid_nc - 11)) plot.new()
+par(op)
+```
+
+Every panel is drawn on the original image's grey scale, so what you see is a
+like-for-like comparison. A side effect is that where a reconstruction
+overshoots past the original's brightest pixel, it clips to pure white.
+
+### Going past k = 10
+
+Ten components isn't always enough to judge where to stop, so here is the same
+image at a wider spread of $k$, finishing at $k = p$, which is exact.
+
+```{r}
+#| echo: false
+#| fig-width: 10
+#| fig-height: !expr grid2_h
+op <- par(mfrow = c(grid2_nr, grid2_nc), oma = c(0, 0, 0, 0))
+for (k in k_more) {
+  show_image(pca_compress(X, k, decomp = dcm)$approximation,
+             main = sprintf("k = %d  (err %.3f)", k, err[k] / normX),
+             zlim = zl, cex_main = cexm)
+}
+for (i in seq_len(grid2_nr * grid2_nc - length(k_more))) plot.new()
+par(op)
+```
+
+Titles give $\text{Error}(k)$ as a fraction of $\lVert X \rVert_F$.
+
+### Error at every k from 1 to `r p`
+
+```{r}
+#| echo: false
+#| fig-width: 8.5
+#| fig-height: 4.6
+plot_error_curve(err, mark = k_choice,
+                 main = sprintf("%s — Frobenius error vs k", img_label))
+```
+
+```{r}
+#| echo: false
+knitr::kable(
+  data.frame(
+    k                = k_tab,
+    `Error(k)`       = round(err[k_tab], 2),
+    `% of Error(1)`  = sprintf("%.1f%%", 100 * err[k_tab] / err[1]),
+    `rel. residual`  = sprintf("%.4f", err[k_tab] / normX),
+    `storage vs raw` = sprintf("%.1f%%",
+                        100 * sapply(k_tab, function(k)
+                          pca_compression_ratio(n, p, k)$ratio)),
+    check.names = FALSE
+  ),
+  caption = sprintf("%s — error and storage cost at selected k. The residual column is Error(k) divided by ||X||_F.", img_label)
+)
+```
+
+### The first eigenvector and the first score vector
+
+```{r}
+#| echo: false
+#| fig-width: 10
+#| fig-height: 4.2
+plot_u1_z1(dsc$u1, dsc$z1)
+```
+
+Numbers behind those two curves, which the discussion below refers back to:
+
+```{r}
+#| echo: false
+cat(sprintf(
+"u1 : %.1f%% of its %d entries are positive; range [%.4f, %.4f];
+      largest-magnitude entry at column %d; dispersion sd/mean|u1| = %.3f
+z1 : range [%.1f, %.1f]; largest magnitude at row %d; minimum at row %d
+      (rows are numbered from the top of the image)\n",
+100 * dsc$u1_sign_frac, p, dsc$u1_range[1], dsc$u1_range[2],
+dsc$u1_peak_col, dsc$u1_flatness,
+dsc$z1_range[1], dsc$z1_range[2], dsc$z1_peak_row, dsc$z1_min_row))
+```
+
+`r interp_md`

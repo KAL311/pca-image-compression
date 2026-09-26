@@ -1,0 +1,7 @@
+project:
+  type: default
+  # GitHub Pages is configured to serve "main branch / docs folder", so the
+  # rendered site must land in docs/ and be committed.
+  output-dir: docs
+  render:
+    - index.qmd

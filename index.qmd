@@ -1,0 +1,231 @@
+---
+title: "Image Compression with Principal Components"
+subtitle: "Rank-k approximation on the uncentered cross product X'X"
+author: "Kyle Fraund"
+date: today
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    code-tools: false
+    fig-align: center
+    tbl-cap-location: bottom
+knitr:
+  opts_chunk:
+    comment: ""
+    dev: png
+    dpi: 130
+---
+
+```{r}
+#| label: setup
+#| include: false
+options(knitr.duplicate.label = "allow")
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+source(file.path("R", "pca_compress.R"))
+source(file.path("R", "plot_helpers.R"))
+library(readr)
+
+k_choice_by_image <- tryCatch(
+  source(file.path("config", "k_choices.R"), local = TRUE)$value,
+  error = function(e) list()
+)
+
+MAX_P <- 1200L
+```
+
+```{r}
+#| label: load-data
+#| include: false
+csv_files <- sort(Sys.glob(file.path("data", "*.csv")))
+
+if (length(csv_files) == 0L) {
+  stop("No CSV files found in data/. Put the image CSVs there ",
+       "(image1.csv, image2.csv, ...) and re-render.", call. = FALSE)
+}
+
+read_image_csv <- function(path) {
+  df <- readr::read_csv(path, show_col_types = FALSE, progress = FALSE)
+  m  <- data.matrix(df)
+
+  if (!is.numeric(m))        stop(basename(path), ": not all columns are numeric.", call. = FALSE)
+  if (anyNA(m))              stop(basename(path), ": contains ", sum(is.na(m)),
+                                  " missing values.", call. = FALSE)
+  if (nrow(m) < 2 || ncol(m) < 2) stop(basename(path), ": too small to be an image.", call. = FALSE)
+  if (ncol(m) > MAX_P)       stop(basename(path), ": p = ", ncol(m), " exceeds MAX_P = ",
+                                  MAX_P, ".", call. = FALSE)
+  dimnames(m) <- NULL
+  m
+}
+
+images <- lapply(csv_files, read_image_csv)
+names(images) <- tools::file_path_sans_ext(basename(csv_files))
+```
+
+## What this page is
+
+Each of the four images below is a numeric matrix $X$, one entry per pixel,
+$n$ rows by $p$ columns. I decompose each one without centering or scaling,
+
+$$V = X'X, \qquad V = U \Lambda U', \qquad Z = XU, \qquad X = ZU'$$
+
+and then throw away all but the first $k$ components:
+
+$$X_{(k)} = z_1u_1' + z_2u_2' + \cdots + z_ku_k',
+\qquad \text{Error}(k) = \lVert X - X_{(k)} \rVert_F .$$
+
+Because $U$ is orthonormal, $UU' = I$ and $X = ZU'$ holds exactly, so setting
+$k = p$ hands back the original image untouched. Any smaller $k$ drops the
+directions that contribute least to $\operatorname{trace}(X'X)$, and the whole
+question is how many of them you can drop before you notice.
+
+It matters that nothing is centered. `prcomp()` subtracts column means by
+default, and once it does, $ZU'$ reconstructs $X$ minus those means rather than
+$X$ itself, so the reconstruction is no longer the image. Everything here goes
+through `eigen(crossprod(x), symmetric = TRUE)` instead.
+
+A note on the data, since it changes how the plots read: these pixel values
+aren't on a 0-255 scale. They're roughly zero-centered floats, some negative.
+That means $X'X$ is picking up energy, or distance from mid-grey, rather than
+brightness, which is why the first eigenvector doesn't always look like an
+average column the way you might expect.
+
+## Part 1: the compression function
+
+Here is `R/pca_compress.R` in full.
+
+```{r}
+#| label: echo-source
+#| echo: false
+#| results: asis
+cat("```r\n", paste(readLines(file.path("R", "pca_compress.R")), collapse = "\n"),
+    "\n```\n", sep = "")
+```
+
+`pca_compress(x, k)` is the piece the assignment asks for. It checks its inputs,
+decomposes $X'X$, truncates to $k$ components and returns both the rank-$k$
+matrix and its Frobenius error. Input validation rejects a non-numeric or
+non-matrix `x`, a `k` that isn't a single whole number, and any `k` outside
+$1 \le k \le p$. The approximation itself is the one-line matrix product
+`Z[, 1:k] %*% t(U[, 1:k])`, with `drop = FALSE` so that $k = 1$ stays a matrix
+instead of collapsing to a vector.
+
+The other three functions exist for speed and convenience:
+
+- `pca_decomp(x)` does the eigendecomposition and returns `U`, `lambda` and
+  `Z = XU`. You can hand the result back to `pca_compress()` through its
+  `decomp` argument, which matters here because this page needs an error for
+  every $k$ from 1 to $p$ and redoing an $O(p^3)$ eigendecomposition a few
+  hundred times would be silly. `crossprod(x)` is used rather than
+  `t(x) %*% x` because it's about twice as fast, and `symmetric = TRUE` forces
+  the real-symmetric LAPACK routine, which guarantees a genuinely orthonormal
+  $U$ and returns the eigenvalues already sorted largest first.
+- `pca_error_curve(x)` walks $k$ from 1 to $p$ accumulating rank-one updates,
+  $X_{(k)} = X_{(k-1)} + z_ku_k'$. Rebuilding each approximation from scratch
+  would cost $O(np^3)$ across the sweep; this way it's $O(np^2)$. These are real
+  `norm(..., type = "F")` values on the residual, not the
+  $\sqrt{\sum \lambda}$ shortcut, which is the point of the second check below.
+- `pca_compression_ratio(n, p, k)` is the storage arithmetic: $(n+p)k$ numbers
+  kept against $np$ in the raw image.
+
+### Does it actually work?
+
+Three things have to be true, and all three are checked on the real data rather
+than asserted:
+
+```{r}
+#| label: verification
+#| echo: false
+verify_one <- function(nm, X) {
+  d   <- pca_decomp(X)
+  p   <- ncol(X)
+  nX  <- norm(X, type = "F")
+  err <- pca_error_curve(X, decomp = d)
+
+  tail_sum <- rev(cumsum(rev(d$lambda)))
+  theory   <- c(sqrt(tail_sum[-1]), 0)
+
+  cat(sprintf("=== %s  (n = %d, p = %d) ===\n", nm, nrow(X), p))
+  cat(sprintf("1. Error(k = p) = %.4e   vs  ||X||_F = %.2f   -> relative %.2e\n",
+              err[p], nX, err[p] / nX))
+  cat(sprintf("2. max_k |Error(k) - sqrt(sum lambda_{k+1..p})| = %.4e\n",
+              max(abs(err - theory))))
+  cat(sprintf("   e.g. k = 5 : Error = %.6f , sqrt(tail) = %.6f\n",
+              err[min(5, p)], theory[min(5, p)]))
+  cat(sprintf("3. Error monotone non-increasing: %s  (largest step up = %.3e)\n\n",
+              all(diff(err) <= 1e-8), max(diff(err))))
+  invisible(NULL)
+}
+invisible(verify_one(names(images)[1], images[[1]]))
+```
+
+Keeping every component reproduces the image to fifteen significant figures, the
+Frobenius error agrees with the square root of the discarded eigenvalues to
+within floating-point noise, and the error never goes up as $k$ grows. There's
+also a separate test file, `tests/test_pca_compress.R`, that runs seventeen
+checks on throwaway matrices, including the input validation and both the
+$n < p$ and $n > p$ cases.
+
+## Part 2: the images
+
+```{r}
+#| label: per-image
+#| echo: false
+#| results: asis
+tmpl <- readLines("_image_template.qmd")
+
+out <- character(0)
+for (i in seq_along(images)) {
+  X         <- images[[i]]
+  img_name  <- names(images)[i]
+  img_label <- img_name
+  n <- nrow(X); p <- ncol(X)
+
+  dcm   <- pca_decomp(X)
+  err   <- pca_error_curve(X, decomp = dcm)
+  normX <- norm(X, type = "F")
+  dsc   <- describe_pc1(X, dcm, err)
+  zl    <- range(X, finite = TRUE)
+
+  k_choice <- k_choice_by_image[[img_name]]
+  k_tab    <- unique(pmin(c(1, 2, 3, 5, 10, 20, 40, 80, p), p))
+
+  aspect <- n / p
+  if (aspect >= 3) {
+    grid_nr <- 1;  grid_nc <- 11
+  } else if (aspect <= 1/3) {
+    grid_nr <- 11; grid_nc <- 1
+  } else {
+    grid_nr <- 3;  grid_nc <- 4
+  }
+  grid_h <- max(4, min(22, grid_nr * (10 / grid_nc) * aspect + 0.45 * grid_nr))
+  cexm   <- if (grid_nc >= 8) 0.8 else 1
+
+  k_more    <- unique(pmin(c(15, 20, 30, 40, 60, p), p))
+  grid2_nc  <- if (grid_nr == 1) length(k_more) else min(3, length(k_more))
+  grid2_nr  <- ceiling(length(k_more) / grid2_nc)
+  grid2_h   <- max(3.5, min(22, grid2_nr * (10 / grid2_nc) * aspect + 0.45 * grid2_nr))
+
+  interp_path <- file.path("interpretations", paste0(img_name, ".md"))
+  interp_md <- if (file.exists(interp_path)) {
+    paste(readLines(interp_path, warn = FALSE), collapse = "\n")
+  } else {
+    paste0("::: {.callout-important title=\"Interpretation not written yet\"}\n",
+           "No `", interp_path, "` found.\n:::")
+  }
+
+  out <- c(out, knitr::knit_child(text = tmpl, envir = environment(),
+                                  quiet = TRUE))
+}
+cat(paste(out, collapse = "\n\n"))
+```
+
+## Rebuilding this page
+
+```bash
+Rscript tests/test_pca_compress.R
+quarto render
+```
